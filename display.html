@@ -146,17 +146,40 @@
     return `${pad(m)}:${pad(s)}`;
   }
 
-  // 根據文字長度動態調整字體大小，確保滿版又不溢出
+  // 動態量測：把字撐到螢幕邊界（取寬高較小者）
+  // 不同字符數用 cache，同長度只算一次
+  const sizeCache = {};
+  const PAD_W = 0.98;  // 寬度用到 98%
+  const PAD_H = 0.96;  // 高度用到 96%
+  const BASE = 400;    // 量測用基準字體大小（px）
+
   function fitText(text) {
-    // 字符數越多，字越小
     const len = text.length;
-    let vmin;
-    if (len <= 5) vmin = 32;       // mm:ss
-    else if (len <= 6) vmin = 27;  // -mm:ss
-    else if (len <= 7) vmin = 23;  // h:mm:ss
-    else vmin = 18;                // -h:mm:ss 或更長
-    timeEl.style.fontSize = `${vmin}vmin`;
+    if (sizeCache[len]) {
+      timeEl.style.fontSize = sizeCache[len];
+      return;
+    }
+    timeEl.style.fontSize = BASE + 'px';
+    const rect = timeEl.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const ratio = Math.min(
+      (window.innerWidth * PAD_W) / rect.width,
+      (window.innerHeight * PAD_H) / rect.height
+    );
+    const px = Math.floor(BASE * ratio);
+    sizeCache[len] = px + 'px';
+    timeEl.style.fontSize = sizeCache[len];
   }
+
+  // 螢幕大小改變（旋轉、視窗縮放）時清快取重算
+  function invalidateSize() {
+    for (const k in sizeCache) delete sizeCache[k];
+    if (lastText) {
+      fitText(lastText);
+    }
+  }
+  window.addEventListener('resize', invalidateSize);
+  window.addEventListener('orientationchange', invalidateSize);
 
   let lastText = '';
   let lastClass = '';
