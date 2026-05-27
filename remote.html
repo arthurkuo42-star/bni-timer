@@ -9,6 +9,9 @@
 <meta name="theme-color" content="#111111">
 <title>BNI 計時器 – 遙控</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' fill='%23111'/><text x='50%' y='62%' font-size='90' fill='%23FFE600' text-anchor='middle' font-family='monospace' font-weight='900'>🎛</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;900&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -66,7 +69,8 @@
     transition: color 0.15s linear;
   }
   .preview .time {
-    font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+    font-family: 'Roboto Mono', monospace;
+    font-feature-settings: "zero" 0, "ss01" 0;
     font-size: 64px; font-weight: 900;
     color: var(--yellow); line-height: 1; letter-spacing: -0.04em;
     font-variant-numeric: tabular-nums;
@@ -128,7 +132,8 @@
     flex: 1; background: var(--card-2); color: var(--text);
     border: 1px solid var(--border); border-radius: 10px;
     padding: 12px 14px; font-size: 16px;
-    font-family: 'SF Mono', 'Menlo', monospace;
+    font-family: 'Roboto Mono', monospace;
+    font-feature-settings: "zero" 0, "ss01" 0;
     text-align: center;
     -webkit-appearance: none;
   }
@@ -150,15 +155,18 @@
   .pause-btn { background: #F59E0B; }
   .reset-btn { background: var(--gray); }
 
-  /* +/- 30 秒 */
+  /* 微調 +/- */
   .adjust-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
   }
   .adjust-btn {
     background: var(--card-2); color: var(--text);
-    padding: 14px; font-size: 15px; font-weight: 600;
+    padding: 14px 4px; font-size: 14px; font-weight: 600;
+    white-space: nowrap;
   }
   .adjust-btn:hover { background: #2E2E2E; }
+  .adjust-btn.minus { color: #E8C97A; }
+  .adjust-btn.plus  { color: #7AE89C; }
 
   /* 狀態指示 */
   .status-line {
@@ -224,8 +232,12 @@
 <div class="card">
   <h2>微調時間</h2>
   <div class="adjust-grid">
-    <button class="adjust-btn" id="minus30Btn">− 30 秒</button>
-    <button class="adjust-btn" id="plus30Btn">＋ 30 秒</button>
+    <button class="adjust-btn minus" data-adjust="-60000">− 1 分</button>
+    <button class="adjust-btn minus" data-adjust="-30000">− 30 秒</button>
+    <button class="adjust-btn minus" data-adjust="-10000">− 10 秒</button>
+    <button class="adjust-btn plus" data-adjust="10000">＋ 10 秒</button>
+    <button class="adjust-btn plus" data-adjust="30000">＋ 30 秒</button>
+    <button class="adjust-btn plus" data-adjust="60000">＋ 1 分</button>
   </div>
 </div>
 
@@ -282,8 +294,7 @@
   const startBtn = document.getElementById('startBtn');
   const pauseBtn = document.getElementById('pauseBtn');
   const resetBtn = document.getElementById('resetBtn');
-  const plus30Btn = document.getElementById('plus30Btn');
-  const minus30Btn = document.getElementById('minus30Btn');
+  const adjustBtns = document.querySelectorAll('.adjust-btn');
   const toastEl = document.getElementById('toast');
 
   // ===== 快選按鈕生成 =====
@@ -482,7 +493,12 @@
           updatedAt: serverTimestamp()
         });
       }
-      toast(`${deltaMs > 0 ? '+' : '−'}${Math.abs(deltaMs / 1000)} 秒`);
+      const absSec = Math.abs(deltaMs / 1000);
+      const sign = deltaMs > 0 ? '+' : '−';
+      const label = absSec >= 60 && absSec % 60 === 0
+        ? `${sign}${absSec / 60} 分`
+        : `${sign}${absSec} 秒`;
+      toast(label);
     } catch (e) { toast('連線失敗，請重試'); }
   }
 
@@ -501,8 +517,10 @@
   startBtn.addEventListener('click', startTimer);
   pauseBtn.addEventListener('click', pauseTimer);
   resetBtn.addEventListener('click', resetTimer);
-  plus30Btn.addEventListener('click', () => adjustTime(30000));
-  minus30Btn.addEventListener('click', () => adjustTime(-30000));
+  adjustBtns.forEach(btn => {
+    const deltaMs = Number(btn.dataset.adjust);
+    btn.addEventListener('click', () => adjustTime(deltaMs));
+  });
 
   // ===== 主預覽更新循環（每秒幾次）=====
   function updatePreview() {
