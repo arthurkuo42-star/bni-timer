@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0B0B0B">
+<title>BNI 計時器</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100vh;
+    background: #0B0B0B; color: #F5F5F5;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    max-width: 520px; margin: 0 auto;
+    padding: 32px 20px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .logo {
+    text-align: center; padding: 12px 0;
+  }
+  .logo .icon { font-size: 64px; line-height: 1; }
+  .logo h1 {
+    font-size: 24px; font-weight: 800; margin-top: 8px;
+    color: #FFE600; letter-spacing: 1px;
+  }
+  .logo p { color: #888; font-size: 13px; margin-top: 4px; }
+
+  .card {
+    background: #1A1A1A; border: 1px solid #2A2A2A;
+    border-radius: 16px; padding: 20px;
+    display: flex; flex-direction: column; gap: 12px;
+    text-decoration: none; color: inherit;
+    transition: transform 0.08s ease, border-color 0.15s;
+  }
+  .card:active { transform: scale(0.98); }
+  .card:hover { border-color: #FFE600; }
+  .card .row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .card .icon-box {
+    width: 56px; height: 56px; border-radius: 12px;
+    background: #000; display: flex; align-items: center; justify-content: center;
+    font-size: 28px; flex-shrink: 0;
+  }
+  .card .icon-box.yellow { background: #000; color: #FFE600; }
+  .card .icon-box.blue { background: #1E3A8A; color: #93C5FD; }
+  .card h2 { font-size: 17px; font-weight: 700; }
+  .card .sub { font-size: 13px; color: #888; margin-top: 2px; }
+  .card .desc {
+    font-size: 12px; color: #999; line-height: 1.6;
+    padding-top: 4px; border-top: 1px solid #2A2A2A;
+  }
+  .card .desc strong { color: #FFE600; font-weight: 600; }
+
+  .footer {
+    text-align: center; color: #555; font-size: 12px; padding: 16px 0;
+    line-height: 1.7;
+  }
+  .footer a { color: #888; text-decoration: none; }
+  .footer .conn {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 8px;
+  }
+  .footer .dot { width: 6px; height: 6px; border-radius: 50%; background: #444; }
+  .footer .conn.connected .dot { background: #22C55E; }
+  .footer .conn.disconnected .dot { background: #EF4444; }
+</style>
+</head>
+<body>
+
+<div class="logo">
+  <div class="icon">⏱</div>
+  <h1>BNI 富鼎計時器</h1>
+  <p>講台 + 遙控 · 全平台同步</p>
+</div>
+
+<a class="card" href="./display.html">
+  <div class="row">
+    <div class="icon-box yellow">📺</div>
+    <div>
+      <h2>顯示頁（iPad）</h2>
+      <div class="sub">黑底黃字、全螢幕倒數</div>
+    </div>
+  </div>
+  <div class="desc">
+    在 <strong>iPad</strong> 上打開，雙擊進入全螢幕。<br>
+    建議「加到主畫面」後從桌面開啟，會自動全螢幕、不會睡著。
+  </div>
+</a>
+
+<a class="card" href="./remote.html">
+  <div class="row">
+    <div class="icon-box blue">🎛</div>
+    <div>
+      <h2>遙控頁（手機 / 電腦）</h2>
+      <div class="sub">開始 / 暫停 / 設定時間</div>
+    </div>
+  </div>
+  <div class="desc">
+    在 <strong>手機或電腦</strong>上打開，可隨時調整 iPad 的計時器。<br>
+    含快選按鈕、手動輸入、+/- 30 秒微調。
+  </div>
+</a>
+
+<div class="footer">
+  <div>單一 Firebase 資料庫，全平台即時同步</div>
+  <div class="conn" id="conn"><span class="dot"></span><span id="connText">連線檢查中…</span></div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBxUBUz52evhvVDSnTJC4yWT_D-BAr8-bI",
+    authDomain: "timmer-3abf6.firebaseapp.com",
+    databaseURL: "https://timmer-3abf6-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "timmer-3abf6",
+    storageBucket: "timmer-3abf6.firebasestorage.app",
+    messagingSenderId: "324145895368",
+    appId: "1:324145895368:web:c655e1e2b259ec010092fd"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const connRef = ref(db, '.info/connected');
+  const connEl = document.getElementById('conn');
+  const connTextEl = document.getElementById('connText');
+
+  onValue(connRef, (snap) => {
+    if (snap.val() === true) {
+      connEl.className = 'conn connected';
+      connTextEl.textContent = 'Firebase 已連線';
+    } else {
+      connEl.className = 'conn disconnected';
+      connTextEl.textContent = '無法連線（請檢查網路）';
+    }
+  });
+</script>
+
+</body>
+</html>

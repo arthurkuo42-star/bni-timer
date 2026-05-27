@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="遙控">
+<meta name="theme-color" content="#111111">
+<title>BNI 計時器 – 遙控</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' fill='%23111'/><text x='50%' y='62%' font-size='90' fill='%23FFE600' text-anchor='middle' font-family='monospace' font-weight='900'>🎛</text></svg>">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0B0B0B;
+    --card: #1A1A1A;
+    --card-2: #232323;
+    --border: #2A2A2A;
+    --text: #F5F5F5;
+    --text-dim: #888;
+    --yellow: #FFE600;
+    --green: #22C55E;
+    --red: #EF4444;
+    --blue: #3B82F6;
+    --gray: #3A3A3A;
+  }
+  html, body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    min-height: 100vh;
+  }
+  body {
+    max-width: 480px; margin: 0 auto;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  /* 頂部標題 + 連線狀態 */
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 2px;
+  }
+  .header h1 { font-size: 16px; font-weight: 700; color: var(--text-dim); letter-spacing: 0.5px; }
+  .conn {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-dim);
+  }
+  .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gray); }
+  .conn.connected .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .conn.disconnected .dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .conn.disconnected { color: var(--red); }
+
+  /* 同步顯示卡（迷你版顯示頁）*/
+  .preview {
+    background: #000; border-radius: 14px;
+    padding: 28px 16px; text-align: center;
+    border: 1px solid var(--border);
+    transition: background-color 0.15s linear;
+    position: relative; overflow: hidden;
+  }
+  .preview .label {
+    font-size: 11px; color: var(--text-dim); letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 8px;
+    transition: color 0.15s linear;
+  }
+  .preview .time {
+    font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 64px; font-weight: 900;
+    color: var(--yellow); line-height: 1; letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.15s linear;
+  }
+  .preview.state-flash-red { background: #D40000; }
+  .preview.state-flash-red .label { color: rgba(255, 255, 255, 0.7); }
+  .preview.state-flash-red .time { color: var(--yellow); }
+  .preview.state-flash-black { background: #000; }
+  .preview.state-flash-black .time { color: #D40000; }
+  .preview.state-overtime { background: #FFFFFF; }
+  .preview.state-overtime .label { color: #999; }
+  .preview.state-overtime .time { color: #D40000; }
+  .preview.state-paused .time { animation: blink 1.6s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  /* 卡片區塊 */
+  .card {
+    background: var(--card); border-radius: 14px; padding: 14px;
+    border: 1px solid var(--border);
+  }
+  .card h2 {
+    font-size: 13px; font-weight: 600; color: var(--text-dim);
+    letter-spacing: 0.5px; margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  /* 按鈕通用 */
+  button {
+    font-family: inherit; cursor: pointer;
+    border: none; outline: none;
+    border-radius: 10px;
+    transition: transform 0.06s ease, background-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: scale(0.96); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:disabled:active { transform: none; }
+
+  /* 快選按鈕格 */
+  .preset-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .preset-btn {
+    background: var(--card-2); color: var(--text);
+    padding: 14px 4px;
+    font-size: 14px; font-weight: 600;
+  }
+  .preset-btn:hover { background: #2E2E2E; }
+  .preset-btn.active {
+    background: var(--yellow); color: #000;
+  }
+
+  /* 手動輸入區 */
+  .manual {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .manual input {
+    flex: 1; background: var(--card-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; font-size: 16px;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    text-align: center;
+    -webkit-appearance: none;
+  }
+  .manual input:focus { border-color: var(--yellow); outline: none; }
+  .manual .apply-btn {
+    background: var(--blue); color: white;
+    padding: 12px 20px; font-size: 15px; font-weight: 600;
+  }
+
+  /* 主控制按鈕（大）*/
+  .main-controls {
+    display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px;
+  }
+  .main-btn {
+    padding: 18px 8px; font-size: 17px; font-weight: 700;
+    color: white;
+  }
+  .start-btn { background: var(--green); }
+  .pause-btn { background: #F59E0B; }
+  .reset-btn { background: var(--gray); }
+
+  /* +/- 30 秒 */
+  .adjust-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .adjust-btn {
+    background: var(--card-2); color: var(--text);
+    padding: 14px; font-size: 15px; font-weight: 600;
+  }
+  .adjust-btn:hover { background: #2E2E2E; }
+
+  /* 狀態指示 */
+  .status-line {
+    font-size: 12px; color: var(--text-dim); text-align: center;
+    padding: 2px 0;
+  }
+  .status-line strong { color: var(--text); }
+  .status-line.running strong { color: var(--green); }
+  .status-line.paused strong { color: #F59E0B; }
+  .status-line.overtime strong { color: var(--red); }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.85); color: white;
+    padding: 10px 18px; border-radius: 20px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>BNI 計時器 · 遙控</h1>
+  <div id="conn" class="conn"><span class="dot"></span><span id="connText">連線中…</span></div>
+</div>
+
+<!-- 同步顯示預覽 -->
+<div id="preview" class="preview state-idle">
+  <div class="label">iPad 目前顯示</div>
+  <div id="previewTime" class="time">--:--</div>
+</div>
+<div id="statusLine" class="status-line">狀態：<strong>未啟動</strong></div>
+
+<!-- 快選 -->
+<div class="card">
+  <h2>快選時間</h2>
+  <div class="preset-grid" id="presetGrid"></div>
+</div>
+
+<!-- 手動輸入 -->
+<div class="card">
+  <h2>手動輸入</h2>
+  <div class="manual">
+    <input id="manualInput" type="text" placeholder="例：5:30 或 1:30:00" inputmode="text">
+    <button class="apply-btn" id="applyBtn">設定</button>
+  </div>
+</div>
+
+<!-- 主控 -->
+<div class="card">
+  <h2>主控制</h2>
+  <div class="main-controls">
+    <button class="main-btn start-btn" id="startBtn">開始</button>
+    <button class="main-btn pause-btn" id="pauseBtn">暫停</button>
+    <button class="main-btn reset-btn" id="resetBtn">重設</button>
+  </div>
+</div>
+
+<!-- 微調 -->
+<div class="card">
+  <h2>微調時間</h2>
+  <div class="adjust-grid">
+    <button class="adjust-btn" id="minus30Btn">− 30 秒</button>
+    <button class="adjust-btn" id="plus30Btn">＋ 30 秒</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue, set, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBxUBUz52evhvVDSnTJC4yWT_D-BAr8-bI",
+    authDomain: "timmer-3abf6.firebaseapp.com",
+    databaseURL: "https://timmer-3abf6-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "timmer-3abf6",
+    storageBucket: "timmer-3abf6.firebasestorage.app",
+    messagingSenderId: "324145895368",
+    appId: "1:324145895368:web:c655e1e2b259ec010092fd"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const timerRef = ref(db, 'timer');
+  const connRef = ref(db, '.info/connected');
+
+  // ===== 預設快選 =====
+  const PRESETS = [
+    { label: '30 秒', ms: 30_000 },
+    { label: '1 分', ms: 60_000 },
+    { label: '3 分', ms: 180_000 },
+    { label: '5 分', ms: 300_000 },
+    { label: '10 分', ms: 600_000 },
+    { label: '20 分', ms: 1_200_000 },
+    { label: '30 分', ms: 1_800_000 },
+    { label: '60 分', ms: 3_600_000 }
+  ];
+
+  // 本地鏡像狀態
+  let timer = {
+    state: 'idle',
+    durationMs: 30000,
+    endTime: null,
+    pausedRemainingMs: null
+  };
+
+  // ===== DOM =====
+  const previewEl = document.getElementById('preview');
+  const previewTimeEl = document.getElementById('previewTime');
+  const statusLineEl = document.getElementById('statusLine');
+  const connEl = document.getElementById('conn');
+  const connTextEl = document.getElementById('connText');
+  const presetGrid = document.getElementById('presetGrid');
+  const manualInput = document.getElementById('manualInput');
+  const applyBtn = document.getElementById('applyBtn');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const plus30Btn = document.getElementById('plus30Btn');
+  const minus30Btn = document.getElementById('minus30Btn');
+  const toastEl = document.getElementById('toast');
+
+  // ===== 快選按鈕生成 =====
+  PRESETS.forEach((preset) => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.dataset.ms = preset.ms;
+    btn.textContent = preset.label;
+    btn.addEventListener('click', () => setDuration(preset.ms));
+    presetGrid.appendChild(btn);
+  });
+
+  // ===== Firebase 監聽 =====
+  onValue(connRef, (snap) => {
+    if (snap.val() === true) {
+      connEl.className = 'conn connected';
+      connTextEl.textContent = '已連線';
+    } else {
+      connEl.className = 'conn disconnected';
+      connTextEl.textContent = '連線中斷！按鈕暫時無效';
+    }
+  });
+
+  onValue(timerRef, (snap) => {
+    const data = snap.val();
+    if (!data) {
+      // 初始化資料
+      setDuration(30000);
+      return;
+    }
+    timer = {
+      state: data.state || 'idle',
+      durationMs: typeof data.durationMs === 'number' ? data.durationMs : 30000,
+      endTime: typeof data.endTime === 'number' ? data.endTime : null,
+      pausedRemainingMs: typeof data.pausedRemainingMs === 'number' ? data.pausedRemainingMs : null
+    };
+    updatePresetActive();
+    updateButtonsAvailability();
+  });
+
+  function updatePresetActive() {
+    presetGrid.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.classList.toggle('active',
+        Number(btn.dataset.ms) === timer.durationMs && timer.state === 'idle');
+    });
+  }
+
+  function updateButtonsAvailability() {
+    if (timer.state === 'running') {
+      startBtn.textContent = '進行中';
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+    } else if (timer.state === 'paused') {
+      startBtn.textContent = '繼續';
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+    } else {
+      startBtn.textContent = '開始';
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+    }
+  }
+
+  // ===== 時間格式化 =====
+  function formatTime(ms) {
+    ms = Math.max(0, Math.floor(ms));
+    const totalSec = Math.ceil(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+    return `${pad(m)}:${pad(s)}`;
+  }
+
+  // ===== 解析手動輸入 =====
+  // 支援格式：mm:ss、h:mm:ss、純數字（視為秒）、純分鐘 m（例如 "5" → 5 分）
+  function parseInput(str) {
+    if (!str) return null;
+    str = str.trim().replace(/[：]/g, ':');  // 中文冒號轉半形
+    const parts = str.split(':').map(p => p.trim());
+
+    if (parts.length === 1) {
+      // 純數字：判斷單位
+      const num = Number(parts[0]);
+      if (Number.isNaN(num) || num < 0) return null;
+      // 規則：< 60 → 視為分鐘（常見輸入「5」表示 5 分）；>= 60 → 視為秒
+      if (num < 60) return Math.floor(num * 60_000);
+      return Math.floor(num * 1000);
+    }
+    if (parts.length === 2) {
+      const m = Number(parts[0]);
+      const s = Number(parts[1]);
+      if (Number.isNaN(m) || Number.isNaN(s) || m < 0 || s < 0 || s >= 60) return null;
+      return m * 60_000 + s * 1000;
+    }
+    if (parts.length === 3) {
+      const h = Number(parts[0]);
+      const m = Number(parts[1]);
+      const s = Number(parts[2]);
+      if ([h, m, s].some(n => Number.isNaN(n) || n < 0) || m >= 60 || s >= 60) return null;
+      return h * 3_600_000 + m * 60_000 + s * 1000;
+    }
+    return null;
+  }
+
+  // ===== Toast =====
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1500);
+  }
+
+  // ===== Firebase 寫入動作 =====
+  async function setDuration(ms) {
+    try {
+      await set(timerRef, {
+        state: 'idle',
+        durationMs: ms,
+        endTime: null,
+        pausedRemainingMs: null,
+        updatedAt: serverTimestamp()
+      });
+      toast(`已設為 ${formatTime(ms)}`);
+    } catch (e) { toast('連線失敗，請重試'); }
+  }
+
+  async function startTimer() {
+    try {
+      let remainingMs;
+      if (timer.state === 'paused' && timer.pausedRemainingMs != null) {
+        remainingMs = timer.pausedRemainingMs;
+      } else {
+        remainingMs = timer.durationMs;
+      }
+      if (remainingMs <= 0) {
+        toast('請先設定時間');
+        return;
+      }
+      await update(timerRef, {
+        state: 'running',
+        endTime: Date.now() + remainingMs,
+        pausedRemainingMs: null,
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) { toast('連線失敗，請重試'); }
+  }
+
+  async function pauseTimer() {
+    try {
+      if (timer.state !== 'running' || timer.endTime == null) return;
+      const remaining = Math.max(0, timer.endTime - Date.now());
+      await update(timerRef, {
+        state: 'paused',
+        endTime: null,
+        pausedRemainingMs: remaining,
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) { toast('連線失敗，請重試'); }
+  }
+
+  async function resetTimer() {
+    try {
+      await update(timerRef, {
+        state: 'idle',
+        endTime: null,
+        pausedRemainingMs: null,
+        updatedAt: serverTimestamp()
+      });
+      toast('已重設');
+    } catch (e) { toast('連線失敗，請重試'); }
+  }
+
+  async function adjustTime(deltaMs) {
+    try {
+      if (timer.state === 'running' && timer.endTime != null) {
+        const newEndTime = timer.endTime + deltaMs;
+        // 防止扣到比當下還小的負時間（會直接顯示超時很多）
+        await update(timerRef, {
+          endTime: newEndTime,
+          updatedAt: serverTimestamp()
+        });
+      } else if (timer.state === 'paused' && timer.pausedRemainingMs != null) {
+        const newRemaining = Math.max(0, timer.pausedRemainingMs + deltaMs);
+        await update(timerRef, {
+          pausedRemainingMs: newRemaining,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // idle：調整 durationMs
+        const newDuration = Math.max(0, timer.durationMs + deltaMs);
+        await update(timerRef, {
+          durationMs: newDuration,
+          updatedAt: serverTimestamp()
+        });
+      }
+      toast(`${deltaMs > 0 ? '+' : '−'}${Math.abs(deltaMs / 1000)} 秒`);
+    } catch (e) { toast('連線失敗，請重試'); }
+  }
+
+  // ===== 事件綁定 =====
+  applyBtn.addEventListener('click', () => {
+    const ms = parseInput(manualInput.value);
+    if (ms == null) { toast('格式錯誤（試試 5:30）'); return; }
+    if (ms > 24 * 3_600_000) { toast('時間太長，最多 24 小時'); return; }
+    setDuration(ms);
+    manualInput.value = '';
+    manualInput.blur();
+  });
+  manualInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyBtn.click();
+  });
+  startBtn.addEventListener('click', startTimer);
+  pauseBtn.addEventListener('click', pauseTimer);
+  resetBtn.addEventListener('click', resetTimer);
+  plus30Btn.addEventListener('click', () => adjustTime(30000));
+  minus30Btn.addEventListener('click', () => adjustTime(-30000));
+
+  // ===== 主預覽更新循環（每秒幾次）=====
+  function updatePreview() {
+    const now = Date.now();
+    let text, previewClass, statusText, statusClass;
+
+    if (timer.state === 'running' && timer.endTime != null) {
+      const remaining = timer.endTime - now;
+      if (remaining > 0) {
+        text = formatTime(remaining);
+        previewClass = 'preview state-normal';
+        statusText = '進行中';
+        statusClass = 'status-line running';
+      } else if (remaining > -5000) {
+        const overtimeMs = -remaining;
+        const flashOn = Math.floor(overtimeMs / 500) % 2 === 0;
+        text = '00:00';
+        previewClass = flashOn ? 'preview state-flash-red' : 'preview state-flash-black';
+        statusText = '時間到！';
+        statusClass = 'status-line overtime';
+      } else {
+        const overtimeMs = Math.min(-remaining, 99 * 60_000 + 59_000);
+        text = '-' + formatTime(overtimeMs);
+        previewClass = 'preview state-overtime';
+        statusText = '超時中';
+        statusClass = 'status-line overtime';
+      }
+    } else if (timer.state === 'paused' && timer.pausedRemainingMs != null) {
+      text = formatTime(timer.pausedRemainingMs);
+      previewClass = 'preview state-paused';
+      statusText = '已暫停';
+      statusClass = 'status-line paused';
+    } else {
+      text = formatTime(timer.durationMs);
+      previewClass = 'preview state-idle';
+      statusText = '未啟動';
+      statusClass = 'status-line';
+    }
+
+    if (previewTimeEl.textContent !== text) previewTimeEl.textContent = text;
+    if (previewEl.className !== previewClass) previewEl.className = previewClass;
+    statusLineEl.innerHTML = `狀態：<strong>${statusText}</strong>`;
+    statusLineEl.className = statusClass;
+
+    requestAnimationFrame(updatePreview);
+  }
+  requestAnimationFrame(updatePreview);
+</script>
+
+</body>
+</html>

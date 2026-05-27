@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="計時器">
+<meta name="theme-color" content="#000000">
+<title>BNI 計時器 – 顯示</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' fill='black'/><text x='50%' y='62%' font-size='90' fill='%23FFE600' text-anchor='middle' font-family='monospace' font-weight='900'>⏱</text></svg>">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000; color: #FFE600;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Roboto Mono', 'Menlo', 'Consolas', monospace;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    transition: background-color 0.15s linear;
+  }
+  #time {
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+    transition: color 0.15s linear;
+  }
+  /* 狀態：正常倒數 */
+  body.state-normal { background: #000; }
+  body.state-normal #time { color: #FFE600; }
+  /* 狀態：閃紅（前 5 秒）*/
+  body.state-flash-red { background: #D40000; }
+  body.state-flash-red #time { color: #FFE600; }
+  body.state-flash-black { background: #000; }
+  body.state-flash-black #time { color: #D40000; }
+  /* 狀態：超時 5 秒後（白底紅字）*/
+  body.state-overtime { background: #FFFFFF; }
+  body.state-overtime #time { color: #D40000; }
+  /* 狀態：暫停（黃字微閃）*/
+  body.state-paused { background: #000; }
+  body.state-paused #time { color: #FFE600; animation: blink 1.6s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  /* 狀態：idle */
+  body.state-idle { background: #000; }
+  body.state-idle #time { color: #FFE600; opacity: 0.55; }
+
+  /* 連線狀態小燈 */
+  #conn {
+    position: fixed; top: 12px; right: 14px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #444; opacity: 0.4;
+    transition: background 0.3s, opacity 0.3s;
+  }
+  #conn.connected { background: #22C55E; opacity: 0.6; }
+  #conn.disconnected { background: #EF4444; opacity: 0.9; }
+
+  /* 提示文字（小） */
+  #hint {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    color: #555; font-size: 12px; opacity: 0.5;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    pointer-events: none;
+  }
+  body.fs #hint, body.state-overtime #hint { opacity: 0; }
+</style>
+</head>
+<body class="state-idle">
+
+<div id="time">--:--</div>
+<div id="conn" title="連線狀態"></div>
+<div id="hint">雙擊進入全螢幕｜長按解除</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue, goOnline } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBxUBUz52evhvVDSnTJC4yWT_D-BAr8-bI",
+    authDomain: "timmer-3abf6.firebaseapp.com",
+    databaseURL: "https://timmer-3abf6-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "timmer-3abf6",
+    storageBucket: "timmer-3abf6.firebasestorage.app",
+    messagingSenderId: "324145895368",
+    appId: "1:324145895368:web:c655e1e2b259ec010092fd"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const timerRef = ref(db, 'timer');
+  const connRef = ref(db, '.info/connected');
+
+  // 本地狀態
+  let timer = {
+    state: 'idle',        // 'idle' | 'running' | 'paused'
+    durationMs: 30000,    // 預設 30 秒
+    endTime: null,        // running 時的結束時間戳
+    pausedRemainingMs: null
+  };
+
+  const timeEl = document.getElementById('time');
+  const connEl = document.getElementById('conn');
+  const body = document.body;
+
+  // 連線狀態指示燈
+  onValue(connRef, (snap) => {
+    if (snap.val() === true) {
+      connEl.classList.remove('disconnected');
+      connEl.classList.add('connected');
+    } else {
+      connEl.classList.remove('connected');
+      connEl.classList.add('disconnected');
+    }
+  });
+
+  // 監聽計時器資料
+  onValue(timerRef, (snap) => {
+    const data = snap.val();
+    if (!data) return;
+    timer = {
+      state: data.state || 'idle',
+      durationMs: typeof data.durationMs === 'number' ? data.durationMs : 30000,
+      endTime: typeof data.endTime === 'number' ? data.endTime : null,
+      pausedRemainingMs: typeof data.pausedRemainingMs === 'number' ? data.pausedRemainingMs : null
+    };
+  });
+
+  // 時間格式化：< 60 分顯示 mm:ss，>= 60 分顯示 h:mm:ss
+  function formatTime(ms) {
+    ms = Math.max(0, Math.floor(ms));
+    const totalSec = Math.ceil(ms / 1000);  // 用 ceil 讓「剩 0.5 秒」還是顯示 1，數字感覺更準
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+    return `${pad(m)}:${pad(s)}`;
+  }
+
+  // 根據文字長度動態調整字體大小，確保滿版又不溢出
+  function fitText(text) {
+    // 字符數越多，字越小
+    const len = text.length;
+    let vmin;
+    if (len <= 5) vmin = 32;       // mm:ss
+    else if (len <= 6) vmin = 27;  // -mm:ss
+    else if (len <= 7) vmin = 23;  // h:mm:ss
+    else vmin = 18;                // -h:mm:ss 或更長
+    timeEl.style.fontSize = `${vmin}vmin`;
+  }
+
+  let lastText = '';
+  let lastClass = '';
+  function setDisplay(text, className) {
+    if (text !== lastText) {
+      timeEl.textContent = text;
+      fitText(text);
+      lastText = text;
+    }
+    if (className !== lastClass) {
+      body.className = body.classList.contains('fs') ? `fs ${className}` : className;
+      lastClass = className;
+    }
+  }
+
+  // 主更新循環
+  function tick() {
+    const now = Date.now();
+
+    if (timer.state === 'running' && timer.endTime != null) {
+      const remaining = timer.endTime - now;
+
+      if (remaining > 0) {
+        // 正常倒數
+        setDisplay(formatTime(remaining), 'state-normal');
+      } else if (remaining > -5000) {
+        // 超時前 5 秒：閃紅（每 500ms 切換）
+        const overtimeMs = -remaining;
+        const flashOn = Math.floor(overtimeMs / 500) % 2 === 0;
+        setDisplay('00:00', flashOn ? 'state-flash-red' : 'state-flash-black');
+      } else {
+        // 超時 5 秒後：白底紅字、負數計時
+        const overtimeMs = -remaining;
+        if (overtimeMs >= 99 * 60 * 1000 + 59 * 1000) {
+          // 上限：超過 99:59 就不再增加（避免顯示爆掉）
+          setDisplay('-99:59', 'state-overtime');
+        } else {
+          setDisplay('-' + formatTime(overtimeMs), 'state-overtime');
+        }
+      }
+    } else if (timer.state === 'paused' && timer.pausedRemainingMs != null) {
+      setDisplay(formatTime(timer.pausedRemainingMs), 'state-paused');
+    } else {
+      // idle：顯示預設時間
+      setDisplay(formatTime(timer.durationMs), 'state-idle');
+    }
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ===== Wake Lock（讓螢幕不睡著）=====
+  let wakeLock = null;
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (e) {
+        // 某些瀏覽器需要使用者互動才能啟動，先忽略
+      }
+    }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeLock === null) requestWakeLock();
+  });
+  // 第一次互動時觸發
+  document.addEventListener('click', requestWakeLock, { once: true });
+  document.addEventListener('touchstart', requestWakeLock, { once: true });
+  requestWakeLock();
+
+  // ===== 雙擊切換全螢幕 =====
+  let lastTap = 0;
+  function tryToggleFullscreen() {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (req) {
+        req.call(el).then(() => body.classList.add('fs')).catch(() => {});
+      }
+    } else {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) {
+        exit.call(document).then(() => body.classList.remove('fs')).catch(() => {});
+      }
+    }
+  }
+  function handleTap() {
+    const now = Date.now();
+    if (now - lastTap < 400) {
+      tryToggleFullscreen();
+      lastTap = 0;
+    } else {
+      lastTap = now;
+    }
+  }
+  document.addEventListener('click', handleTap);
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) body.classList.add('fs');
+    else body.classList.remove('fs');
+  });
+</script>
+
+</body>
+</html>
