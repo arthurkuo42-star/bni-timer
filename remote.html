@@ -9,9 +9,6 @@
 <meta name="theme-color" content="#111111">
 <title>BNI 計時器 – 遙控</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' fill='%23111'/><text x='50%' y='62%' font-size='90' fill='%23FFE600' text-anchor='middle' font-family='monospace' font-weight='900'>🎛</text></svg>">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inconsolata:wght@500;900&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -69,11 +66,10 @@
     transition: color 0.15s linear;
   }
   .preview .time {
-    font-family: 'Inconsolata', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-feature-settings: "zero" 0, "ss01" 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     font-size: 64px; font-weight: 900;
     color: var(--yellow); line-height: 1; letter-spacing: -0.04em;
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
     transition: color 0.15s linear;
   }
   .preview.state-flash-red { background: #D40000; }
@@ -132,8 +128,8 @@
     flex: 1; background: var(--card-2); color: var(--text);
     border: 1px solid var(--border); border-radius: 10px;
     padding: 12px 14px; font-size: 16px;
-    font-family: 'Inconsolata', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-feature-settings: "zero" 0, "ss01" 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+    font-variant-numeric: tabular-nums lining-nums;
     text-align: center;
     -webkit-appearance: none;
   }
