@@ -38,10 +38,18 @@ updatedAt          : serverTimestamp
 
 `firebaseConfig` 直接寫死在三個 HTML 裡（Firebase apiKey 設計上就是可公開的，真正的防護是 Database Rules）。
 
-⚠️ **目前 Rules 是 Test Mode（30 天內全開放）**，正式長期使用建議改為：
-- 只允許讀寫 `/timer` 節點
-- 用 Anonymous Auth 或加密 token 限制寫入者
-- 或仍維持「事務所內部分享網址、信任不會被外人亂改」的低安全模式（畢竟也只是計時器，被改了重設就好）
+### Database Rules（2026-06-11 起：永久規則，取代原 Test Mode）
+
+正式規則存於本 repo 的 [database.rules.json](database.rules.json)，已套用到 Firebase Console。設計：
+
+- **根路徑全鎖**：除了 `/timer` 之外，任何路徑都不能讀寫 → 別人不能把這個 DB 當免費儲存空間
+- **`/timer` 開放讀寫**（刻意的，跟座位系統同哲學：拿到遙控頁網址的夥伴就能控制）
+- **欄位白名單 + 型別驗證**：只接受 `state`（限三種值）/ `durationMs`（0~24h）/ `endTime` / `pausedRemainingMs`（0~24h）/ `updatedAt`，其他欄位一律拒絕 → 亂寫資料弄壞頁面的攻擊無效
+- 沒有到期日，不會再發生「30 天後失效」
+
+最壞情況：外人拿到網址亂按計時器 → 重設就好。
+
+要更新規則：Firebase Console → timmer-3abf6 → Realtime Database → 規則 → 貼上 → 發布；改完同步更新 repo 裡的 `database.rules.json` 留底。
 
 ## 部署
 

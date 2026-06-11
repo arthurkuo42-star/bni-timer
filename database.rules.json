@@ -1,0 +1,31 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "timer": {
+      ".read": true,
+      ".write": true,
+
+      "state": {
+        ".validate": "newData.isString() && (newData.val() === 'idle' || newData.val() === 'running' || newData.val() === 'paused')"
+      },
+      "durationMs": {
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000"
+      },
+      "endTime": {
+        ".validate": "newData.isNumber() && newData.val() > 0"
+      },
+      "pausedRemainingMs": {
+        ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000"
+      },
+      "updatedAt": {
+        ".validate": "newData.isNumber()"
+      },
+
+      "$other": {
+        ".validate": false
+      }
+    }
+  }
+}
