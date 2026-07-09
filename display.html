@@ -102,10 +102,16 @@
   // 本地狀態
   let timer = {
     state: 'idle',        // 'idle' | 'running' | 'paused'
-    durationMs: 30000,    // 預設 30 秒
+    durationMs: 30000,    // 預設 30 秒（實際倒數用）
+    displayScale: 1,      // 畫面顯示倍率：1 為正常；「25秒*」這類特殊倒數會 ≠1
     endTime: null,        // running 時的結束時間戳
     pausedRemainingMs: null
   };
+
+  // 真實剩餘時間 → 畫面顯示的剩餘時間（一般情況下 scale=1，不變）
+  function toDisplayMs(realMs) {
+    return realMs * (timer.displayScale || 1);
+  }
 
   const timeEl = document.getElementById('time');
   const connEl = document.getElementById('conn');
@@ -129,6 +135,7 @@
     timer = {
       state: data.state || 'idle',
       durationMs: typeof data.durationMs === 'number' ? data.durationMs : 30000,
+      displayScale: typeof data.displayScale === 'number' ? data.displayScale : 1,
       endTime: typeof data.endTime === 'number' ? data.endTime : null,
       pausedRemainingMs: typeof data.pausedRemainingMs === 'number' ? data.pausedRemainingMs : null
     };
@@ -204,7 +211,7 @@
 
       if (remaining > 0) {
         // 正常倒數
-        setDisplay(formatTime(remaining), 'state-normal');
+        setDisplay(formatTime(toDisplayMs(remaining)), 'state-normal');
       } else if (remaining > -5000) {
         // 超時前 5 秒：閃紅（每 500ms 切換）
         const overtimeMs = -remaining;
@@ -221,10 +228,10 @@
         }
       }
     } else if (timer.state === 'paused' && timer.pausedRemainingMs != null) {
-      setDisplay(formatTime(timer.pausedRemainingMs), 'state-paused');
+      setDisplay(formatTime(toDisplayMs(timer.pausedRemainingMs)), 'state-paused');
     } else {
       // idle：顯示預設時間
-      setDisplay(formatTime(timer.durationMs), 'state-idle');
+      setDisplay(formatTime(toDisplayMs(timer.durationMs)), 'state-idle');
     }
 
     requestAnimationFrame(tick);

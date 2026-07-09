@@ -259,7 +259,10 @@
   const connRef = ref(db, '.info/connected');
 
   // ===== 預設快選 =====
+  // displayMs 若存在，代表這是「顯示時間 ≠ 實際時間」的特殊倒數：
+  // ms 為真實倒數秒數（決定何時真的歸零、觸發超時效果），displayMs 為畫面上顯示的秒數。
   const PRESETS = [
+    { label: '25 秒*', ms: 22_000, displayMs: 25_000 },
     { label: '30 秒', ms: 30_000 },
     { label: '1 分', ms: 60_000 },
     { label: '3 分', ms: 180_000 },
@@ -274,9 +277,15 @@
   let timer = {
     state: 'idle',
     durationMs: 30000,
+    displayScale: 1,
     endTime: null,
     pausedRemainingMs: null
   };
+
+  // 真實剩餘時間 → 畫面顯示的剩餘時間（一般情況下 scale=1，不變）
+  function toDisplayMs(realMs) {
+    return realMs * (timer.displayScale || 1);
+  }
 
   // ===== DOM =====
   const previewEl = document.getElementById('preview');
@@ -295,11 +304,14 @@
 
   // ===== 快選按鈕生成 =====
   PRESETS.forEach((preset) => {
+    const scale = preset.displayMs ? preset.displayMs / preset.ms : 1;
     const btn = document.createElement('button');
     btn.className = 'preset-btn';
     btn.dataset.ms = preset.ms;
+    btn.dataset.scale = scale;
     btn.textContent = preset.label;
-    btn.addEventListener('click', () => setDuration(preset.ms));
+    if (preset.displayMs) btn.title = '畫面顯示 25 秒，實際倒數 22 秒';
+    btn.addEventListener('click', () => setDuration(preset.ms, scale));
     presetGrid.appendChild(btn);
   });
 
@@ -324,6 +336,7 @@
     timer = {
       state: data.state || 'idle',
       durationMs: typeof data.durationMs === 'number' ? data.durationMs : 30000,
+      displayScale: typeof data.displayScale === 'number' ? data.displayScale : 1,
       endTime: typeof data.endTime === 'number' ? data.endTime : null,
       pausedRemainingMs: typeof data.pausedRemainingMs === 'number' ? data.pausedRemainingMs : null
     };
@@ -334,7 +347,9 @@
   function updatePresetActive() {
     presetGrid.querySelectorAll('.preset-btn').forEach(btn => {
       btn.classList.toggle('active',
-        Number(btn.dataset.ms) === timer.durationMs && timer.state === 'idle');
+        Number(btn.dataset.ms) === timer.durationMs &&
+        Number(btn.dataset.scale) === (timer.displayScale || 1) &&
+        timer.state === 'idle');
     });
   }
 
@@ -352,6 +367,9 @@
       startBtn.disabled = false;
       pauseBtn.disabled = true;
     }
+    // 「顯示≠實際」的特殊倒數不支援微調，避免顯示/實際比例跑掉
+    const isTrick = (timer.displayScale || 1) !== 1;
+    adjustBtns.forEach(btn => { btn.disabled = isTrick; });
   }
 
   // ===== 時間格式化 =====
@@ -407,16 +425,17 @@
   }
 
   // ===== Firebase 寫入動作 =====
-  async function setDuration(ms) {
+  async function setDuration(ms, scale = 1) {
     try {
       await set(timerRef, {
         state: 'idle',
         durationMs: ms,
+        displayScale: scale,
         endTime: null,
         pausedRemainingMs: null,
         updatedAt: serverTimestamp()
       });
-      toast(`已設為 ${formatTime(ms)}`);
+      toast(`已設為 ${formatTime(ms * scale)}`);
     } catch (e) { toast('連線失敗，請重試'); }
   }
 
@@ -526,7 +545,7 @@
     if (timer.state === 'running' && timer.endTime != null) {
       const remaining = timer.endTime - now;
       if (remaining > 0) {
-        text = formatTime(remaining);
+        text = formatTime(toDisplayMs(remaining));
         previewClass = 'preview state-normal';
         statusText = '進行中';
         statusClass = 'status-line running';
@@ -545,12 +564,12 @@
         statusClass = 'status-line overtime';
       }
     } else if (timer.state === 'paused' && timer.pausedRemainingMs != null) {
-      text = formatTime(timer.pausedRemainingMs);
+      text = formatTime(toDisplayMs(timer.pausedRemainingMs));
       previewClass = 'preview state-paused';
       statusText = '已暫停';
       statusClass = 'status-line paused';
     } else {
-      text = formatTime(timer.durationMs);
+      text = formatTime(toDisplayMs(timer.durationMs));
       previewClass = 'preview state-idle';
       statusText = '未啟動';
       statusClass = 'status-line';

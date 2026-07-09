@@ -19,6 +19,9 @@
       "pausedRemainingMs": {
         ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000"
       },
+      "displayScale": {
+        ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 10"
+      },
       "updatedAt": {
         ".validate": "newData.isNumber()"
       },
